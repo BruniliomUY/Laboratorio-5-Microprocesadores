@@ -103,20 +103,26 @@ wait_4RX:							;acá me pongo a esperar que alguien presione cualquier botón
 ;---------------------------------------------------------------------------------
 Chksum_512:			
 	;apunto Y al primer byte del mensaje
+	CLC
 	ldi r28, low(buffer_msg)
 	ldi r29, high(buffer_msg)
 	JMP chksum_loop
 chksum_loop:
+	cpi		YL,	   low(bmsg_end)	
+	RCALL suma
+	cpi		YH,		high(bmsg_end)
+	RCALL suma
+	RET
+suma:
 	ld      r21, Y+
 	ADC		r4, R21				;Sumamos cada 1 seg
 	BRVC    chksum_loop			;Si NO supera
-	CLV
 	inc		r5
-	cpi		YL,	   low(bmsg_end)	
-	brne chksum_loop
-	cpi		YH,		high(bmsg_end)
-	brne chksum_loop
+	CLV
 	RET
+
+
+
 	;la suma la voy acumulando en r5:r4
 	;implementar
 	;implementar
