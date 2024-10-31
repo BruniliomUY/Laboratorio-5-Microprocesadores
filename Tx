@@ -106,12 +106,13 @@ Chksum_512:
 	CLC
 	ldi r28, low(buffer_msg)
 	ldi r29, high(buffer_msg)
-	JMP chksum_loop
 chksum_loop:
 	cpi		YL,	   low(bmsg_end)	
-	RCALL suma
+	brne suma
 	cpi		YH,		high(bmsg_end)
-	RCALL suma
+	brne suma
+	ldi r27, 0b00011111
+	AND r5, r27
 	RET
 suma:
 	ld      r21, Y+
@@ -119,10 +120,7 @@ suma:
 	BRVC    chksum_loop			;Si NO supera
 	inc		r5
 	CLV
-	RET
-
-
-
+	rjmp    chksum_loop			;Si NO supera
 	;la suma la voy acumulando en r5:r4
 	;implementar
 	;implementar
@@ -131,22 +129,19 @@ suma:
 ;TX - rutina de transmisión serial USART. Transmite los 512 bytes de buffer_msg
 ;-----------------------------------------------------------------------------------------
 TX_512:
-;inicialización			
-	;apunto Z al primer byte del vector de 512 bytes 
-	;configuro usart como transmisor (UCSR0B)
+;inicialización	
+; Configuración del USART para transmisión
 
 TX_loop1:
-	;traigo el Byte a transmitir	
-	;pongo a transmitir (UDR0)
+	;traigo el Byte a transmitir
 
 TX_loop2:									
 	;espero a que termine la transmisión del byte por poling (UCSR0A)
 	
 
-;chequeo si llegué al final del buffer
+    ;chequeo si llegué al final del buffer
 
 	ret
-
 
 
 ;------------------------------------------------------------------------------
@@ -363,8 +358,20 @@ segmap:
 ; Registros utilizados:
 ;				r25 - indica el próximo digito a sacar, r25 = 00010000 ; 00100000 ; 01000000 ; 10000000 cambia cada entrada a la rutina.
 
-_tmr0_int:							
-	
+_tmr0_int:	
+	in		r22,   SREG
+	PUSH	R25
+	AND		R5,  0b00001111
+		 
+	LDI     r16, 0b0001xxxx
+	RCALL	sacanum
+	LDI     r16, 0b0010xxxx
+	RCALL	sacanum
+	LDI     r16, 0b0100xxxx
+	RCALL	sacanum
+	LDI     r16, 0b1000xxxx
+	RCALL	sacanum
+	POP		R25	
 	;implemente el codigo aqui
 	;implemente el codigo aqui	
 	;implemente el codigo aqui
