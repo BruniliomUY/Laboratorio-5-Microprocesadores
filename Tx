@@ -111,8 +111,8 @@ chksum_loop:
 	brne suma
 	cpi		YH,		high(bmsg_end)
 	brne suma
-	ldi r27, 0b00011111
-	AND r5, r27
+	//ldi r27, 0b00011111
+	//AND r5, r27
 	RET
 suma:
 	ld      r21, Y+
@@ -360,25 +360,48 @@ segmap:
 
 _tmr0_int:	
 	in		r22,   SREG
-	PUSH	R25
-	AND		R5,  0b00001111
-		 
-	LDI     r16, 0b0001xxxx
+	PUSH R16
+
+	MOV		R23,   R25
+	LSL		R23
+	ROL		R16
+	CLC
+	LSL		R23
+	ROL		R16
+	CLC
+	LSL		R23
+	ROL		R16
+	CLC
+	LSL		R23
+	ROL		R16
+	CLC
+
+	LSL		R4
+	ROL		R5
+	ROL		R16
+	CLC
+	LSL		R4
+	ROL		R5
+	ROL		R16
+	CLC
+	LSL		R4
+	ROL		R5
+	ROL		R16
+	CLC
+	LSL		R4
+	ROL		R5
+	ROL		R16
+	CLC
 	RCALL	sacanum
-	LDI     r16, 0b0010xxxx
-	RCALL	sacanum
-	LDI     r16, 0b0100xxxx
-	RCALL	sacanum
-	LDI     r16, 0b1000xxxx
-	RCALL	sacanum
-	POP		R25	
+
+_tmr0_out:
+	LSL		R25
+	out		SREG,   r22
+	POP R16
+	reti
 	;implemente el codigo aqui
 	;implemente el codigo aqui	
 	;implemente el codigo aqui
-
-	reti
-
-
 
 
 
@@ -388,11 +411,15 @@ _tmr0_int:
 ; recordar que se configuró la detección por cambio para que ante un cambio en el valor lógico de cualquiera de los 3 botones
 ; se dispara la interrupción. LA interrupción no distingué qué botón se apretó de modo que lo verifico dentro de la interrupción.
 ; Los botones se encuentran en PC.1, PC.2, PC.3 y recordar del esquemático del shield, que son activos por nivel bajo.
+;Rutina de atención a la interrupción de los botones. Cuando entra si algún botón está apretado pone el bit0 de r26 en '1'.	
 ;
 _pcint1:
-	
+	PUSH r16
+	in		r16, PINC             ; Cargar el valor del puerto C en r16
+	sbrc	r16, 1                ; Saltar si el bit 1 de PC1 está en 0
+	sbr     r26, (1 << 0)
 	;implemente el codigo aqui
 	;implemente el codigo aqui	
 	;implemente el codigo aqui
-	
+	POP	r16
 	reti
