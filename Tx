@@ -366,6 +366,9 @@ _tmr0_int:
 	CLR     R16
 	CLC
 
+	CPI		R25,  0x00
+	BREQ	reset
+
 	MOV		R23,   R25
 	LSL		R23
 	ROL		R16
@@ -394,8 +397,8 @@ _tmr0_int:
 
 _tmr0_out:
 	RCALL	sacanum
-	LSL		R25
 	CLC
+	LSL		R25
 	POP		R4
 	POP		R5
 	POP		R16
@@ -404,13 +407,20 @@ _tmr0_out:
 	;implemente el codigo aqui
 	;implemente el codigo aqui	
 	;implemente el codigo aqui
+reset:
+	LDI		R25,  0x10
+	POP		R4
+	POP		R5
+	POP		R16
+	out		SREG,   r22
+	reti
+
 digit_2:
 	LSL		R4
 	LSL		R4
 	LSL		R4
 	LSL		R4
 	CLC
-
 	LSL		R4
 	ROL		r16
 	CLC
@@ -421,41 +431,6 @@ digit_2:
 	ROL		r16
 	CLC
 	LSL		R4
-	ROL		r16
-	CLC
-	jmp     _tmr0_out
-digit_1:
-	LSL		R4
-	ROL		r16
-	CLC
-	LSL		R4
-	ROL		r16
-	CLC
-	LSL		R4
-	ROL		r16
-	CLC
-	LSL		R4
-	ROL		r16
-	CLC
-	jmp     _tmr0_out
-
-digit_4:
-	LSL		R5
-	LSL		R5
-	LSL		R5
-	LSL		R5
-	CLC
-
-	LSL		R5
-	ROL		r16
-	CLC
-	LSL		R5
-	ROL		r16
-	CLC
-	LSL		R5
-	ROL		r16
-	CLC
-	LSL		R5
 	ROL		r16
 	CLC
 	jmp     _tmr0_out
@@ -473,6 +448,43 @@ digit_3:
 	ROL		r16
 	CLC
 	jmp     _tmr0_out
+digit_1:
+	LSL		R4
+	ROL		r16
+	CLC
+	LSL		R4
+	ROL		r16
+	CLC
+	LSL		R4
+	ROL		r16
+	CLC
+	LSL		R4
+	ROL		r16
+	CLC
+	jmp     _tmr0_out
+digit_4:
+	LSL		R5
+	LSL		R5
+	LSL		R5
+	LSL		R5
+	CLC
+	LSL		R5
+	ROL		r16
+	CLC
+	LSL		R5
+	ROL		r16
+	CLC
+	LSL		R5
+	ROL		r16
+	CLC
+	LSL		R5
+	ROL		r16
+	CLC
+	jmp     _tmr0_out
+
+
+
+	
 
 ; ---------------------------------------------------------------------------
 ; Rutina de atención a la interrupción por cambio en el estado de los botones
