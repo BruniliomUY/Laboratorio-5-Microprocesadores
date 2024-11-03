@@ -103,41 +103,45 @@ wait_4RX:							;acá me pongo a esperar que alguien presione cualquier botón
 ;---------------------------------------------------------------------------------
 Chksum_512:			
 	;apunto Y al primer byte del mensaje
-
-	;implementar
-	;implementar
-	;implementar
-
+	CLC
+	ldi r28, low(buffer_msg)
+	ldi r29, high(buffer_msg)
 chksum_loop:
-	;traigo 1 byte a sumar
+	cpi		YL,	   low(bmsg_end)	
+	brne suma
+	cpi		YH,		high(bmsg_end)
+	brne suma
+	//ldi r27, 0b00011111
+	//AND r5, r27
+	RET
+suma:
+	ld      r21, Y+
+	ADC		r4, R21				;Sumamos cada 1 seg
+	BRVC    chksum_loop			;Si NO supera
+	inc		r5
+	CLV
+	rjmp    chksum_loop			;Si NO supera
 	;la suma la voy acumulando en r5:r4
-
 	;implementar
 	;implementar
 	;implementar
-
-	ret
-
 ;-----------------------------------------------------------------------------------------
 ;TX - rutina de transmisión serial USART. Transmite los 512 bytes de buffer_msg
 ;-----------------------------------------------------------------------------------------
 TX_512:
-;inicialización			
-	;apunto Z al primer byte del vector de 512 bytes 
-	;configuro usart como transmisor (UCSR0B)
+;inicialización	
+; Configuración del USART para transmisión
 
 TX_loop1:
-	;traigo el Byte a transmitir	
-	;pongo a transmitir (UDR0)
+	;traigo el Byte a transmitir
 
 TX_loop2:									
 	;espero a que termine la transmisión del byte por poling (UCSR0A)
 	
 
-;chequeo si llegué al final del buffer
+    ;chequeo si llegué al final del buffer
 
 	ret
-
 
 
 ;------------------------------------------------------------------------------
@@ -354,17 +358,124 @@ segmap:
 ; Registros utilizados:
 ;				r25 - indica el próximo digito a sacar, r25 = 00010000 ; 00100000 ; 01000000 ; 10000000 cambia cada entrada a la rutina.
 
-_tmr0_int:							
-	
+_tmr0_int:	
+	in		r22,   SREG
+	PUSH	R16
+	PUSH	R5
+	PUSH	R4
+	CLR     R16
+	CLC
+
+	CPI		R25,  0x00
+	BREQ	reset
+
+	MOV		R23,   R25
+	LSL		R23
+	ROL		R16
+	CLC
+	LSL		R23
+	ROL		R16
+	CLC
+	LSL		R23
+	ROL		R16
+	CLC
+	LSL		R23
+	ROL		R16
+	CLC
+
+	CPI		R16, 0b00001000
+	BREQ    digit_1
+
+	CPI		R16, 0b00000100
+	BREQ    digit_2
+
+	CPI		R16, 0b00000001
+	BREQ    digit_4
+
+	CPI		R16, 0b00000010
+	BREQ    digit_3
+
+_tmr0_out:
+	RCALL	sacanum
+	CLC
+	LSL		R25
+	POP		R4
+	POP		R5
+	POP		R16
+	out		SREG,   r22
+	reti
 	;implemente el codigo aqui
 	;implemente el codigo aqui	
 	;implemente el codigo aqui
-
+reset:
+	LDI		R25,  0x10
+	POP		R4
+	POP		R5
+	POP		R16
+	out		SREG,   r22
 	reti
 
+digit_2:
+    ; Desplazar R4 cuatro veces a la izquierda
+    LSL     R4
+    LSL     R4
+    LSL     R4
+    LSL     R4
+    ; Rotar hacia r16
+    LSL     R4
+    ROL     r16
+    LSL     R4
+    ROL     r16
+    LSL     R4
+    ROL     r16
+    LSL     R4
+    ROL     r16
+    jmp     _tmr0_out
+
+digit_3:
+    ; Desplazar y rotar desde R5 hacia r16
+    LSL     R5
+    ROL     r16
+    LSL     R5
+    ROL     r16
+    LSL     R5
+    ROL     r16
+    LSL     R5
+    ROL     r16
+    jmp     _tmr0_out
+
+digit_1:
+    ; Desplazar y rotar desde R4 hacia r16
+    LSL     R4
+    ROL     r16
+    LSL     R4
+    ROL     r16
+    LSL     R4
+    ROL     r16
+    LSL     R4
+    ROL     r16
+    jmp     _tmr0_out
+
+digit_4:
+    ; Desplazar R5 cuatro veces a la izquierda
+    LSL     R5
+    LSL     R5
+    LSL     R5
+    LSL     R5
+    ; Rotar hacia r16
+    LSL     R5
+    ROL     r16
+    LSL     R5
+    ROL     r16
+    LSL     R5
+    ROL     r16
+    LSL     R5
+    ROL     r16
+    jmp     _tmr0_out
 
 
 
+	
 
 ; ---------------------------------------------------------------------------
 ; Rutina de atención a la interrupción por cambio en el estado de los botones
@@ -372,11 +483,17 @@ _tmr0_int:
 ; recordar que se configuró la detección por cambio para que ante un cambio en el valor lógico de cualquiera de los 3 botones
 ; se dispara la interrupción. LA interrupción no distingué qué botón se apretó de modo que lo verifico dentro de la interrupción.
 ; Los botones se encuentran en PC.1, PC.2, PC.3 y recordar del esquemático del shield, que son activos por nivel bajo.
+;Rutina de atención a la interrupción de los botones. Cuando entra si algún botón está apretado pone el bit0 de r26 en '1'.	
 ;
 _pcint1:
-	
+	in		r22,   SREG
+	PUSH r16
+	in		r16, PINC             ; Cargar el valor del puerto C en r16
+	sbrc	r16, 1                ; Saltar si el bit 1 de PC1 está en 0
+	sbr     r26, (1 << 0)
 	;implemente el codigo aqui
 	;implemente el codigo aqui	
 	;implemente el codigo aqui
-	
+	POP	r16
+	out		SREG,   r22
 	reti
