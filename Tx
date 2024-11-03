@@ -36,6 +36,8 @@
 	jmp		_pcint1		;salto a la rutina de atención a pcint1, interrupción por cambio para los botones
 .ORG 0x001C 
 	jmp		_tmr0_int	;salto atención a rutina de comparación A del timer 0
+.ORG 0x24
+	rjmp RX
 ; ---------------------------------------------------------------------------------------
 
 ;memoria RAM
@@ -130,6 +132,7 @@ suma:
 ;-----------------------------------------------------------------------------------------
 TX_512:
 ;inicialización	
+
 ; Configuración del USART para transmisión
 
 TX_loop1:
@@ -149,19 +152,27 @@ TX_loop2:
 ;IMPORTANTE: acá está SIN INTERRUPCIONES lo cual es ineficiente 
 ;------------------------------------------------------------------------------
 RX_512:
-;inicialización			
+	;inicialización		
+	
 	;apunto Z al primer byte del vector de 512 bytes
-	;configuro el USART como receptor (UCSR0B)
+	ldi		r31,	low(buffer_msg)		;apunto Z al primer byte del mensaje
+	ldi		r30,	high(buffer_msg)
 
+	;configuro el USART como receptor (UCSR0B)
+	PUSH	R22
+	LDI		R22,	0x90
+	STS		UCSR0B,	R22
+	POP     R22
+	SEI
 RX_Wait:
 	;ahora poling para esperar recibir algo	(UDR0)
-	
+	RJMP	RX_Wait
+RX: LDS		R23,	UDR0
 	;llego aquí solo si recibí algo
-	; guardo lo que recibí		
-	
 
-	;chequeo si llegué al final del buffer
+	; guardo lo que recibí	
 	
+	;chequeo si llegué al final del buffer
 	ret
 						
 
