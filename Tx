@@ -360,7 +360,11 @@ segmap:
 
 _tmr0_int:	
 	in		r22,   SREG
-	PUSH R16
+	PUSH	R16
+	PUSH	R5
+	PUSH	R4
+	CLR     R16
+	CLC
 
 	MOV		R23,   R25
 	LSL		R23
@@ -376,34 +380,99 @@ _tmr0_int:
 	ROL		R16
 	CLC
 
-	LSL		R4
-	ROL		R5
-	ROL		R16
-	CLC
-	LSL		R4
-	ROL		R5
-	ROL		R16
-	CLC
-	LSL		R4
-	ROL		R5
-	ROL		R16
-	CLC
-	LSL		R4
-	ROL		R5
-	ROL		R16
-	CLC
-	RCALL	sacanum
+	CPI		R16, 0b00001000
+	BREQ    digit_1
+
+	CPI		R16, 0b00000100
+	BREQ    digit_2
+
+	CPI		R16, 0b00000001
+	BREQ    digit_4
+
+	CPI		R16, 0b00000010
+	BREQ    digit_3
 
 _tmr0_out:
+	RCALL	sacanum
 	LSL		R25
+	CLC
+	POP		R4
+	POP		R5
+	POP		R16
 	out		SREG,   r22
-	POP R16
 	reti
 	;implemente el codigo aqui
 	;implemente el codigo aqui	
 	;implemente el codigo aqui
+digit_2:
+	LSL		R4
+	LSL		R4
+	LSL		R4
+	LSL		R4
+	CLC
 
+	LSL		R4
+	ROL		r16
+	CLC
+	LSL		R4
+	ROL		r16
+	CLC
+	LSL		R4
+	ROL		r16
+	CLC
+	LSL		R4
+	ROL		r16
+	CLC
+	jmp     _tmr0_out
+digit_1:
+	LSL		R4
+	ROL		r16
+	CLC
+	LSL		R4
+	ROL		r16
+	CLC
+	LSL		R4
+	ROL		r16
+	CLC
+	LSL		R4
+	ROL		r16
+	CLC
+	jmp     _tmr0_out
 
+digit_4:
+	LSL		R5
+	LSL		R5
+	LSL		R5
+	LSL		R5
+	CLC
+
+	LSL		R5
+	ROL		r16
+	CLC
+	LSL		R5
+	ROL		r16
+	CLC
+	LSL		R5
+	ROL		r16
+	CLC
+	LSL		R5
+	ROL		r16
+	CLC
+	jmp     _tmr0_out
+digit_3:
+	LSL		R5
+	ROL		r16
+	CLC
+	LSL		R5
+	ROL		r16
+	CLC
+	LSL		R5
+	ROL		r16
+	CLC
+	LSL		R5
+	ROL		r16
+	CLC
+	jmp     _tmr0_out
 
 ; ---------------------------------------------------------------------------
 ; Rutina de atención a la interrupción por cambio en el estado de los botones
@@ -414,6 +483,7 @@ _tmr0_out:
 ;Rutina de atención a la interrupción de los botones. Cuando entra si algún botón está apretado pone el bit0 de r26 en '1'.	
 ;
 _pcint1:
+	in		r22,   SREG
 	PUSH r16
 	in		r16, PINC             ; Cargar el valor del puerto C en r16
 	sbrc	r16, 1                ; Saltar si el bit 1 de PC1 está en 0
@@ -422,4 +492,5 @@ _pcint1:
 	;implemente el codigo aqui	
 	;implemente el codigo aqui
 	POP	r16
+	out		SREG,   r22
 	reti
