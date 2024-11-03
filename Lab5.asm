@@ -396,13 +396,13 @@ _tmr0_int:
     CLC               ; Limpiar el carry nuevamente
 
 	CPI r16, 0b00001000
-    BREQ digit_1
+    BREQ digito1
     CPI r16, 0b00000100
-    BREQ digit_2
+    BREQ digito2
     CPI r16, 0b00000001
-    BREQ digit_4
+    BREQ digito4
     CPI r16, 0b00000010
-    BREQ digit_3
+    BREQ digito3
 
 _tmr0_out:
     RCALL sacanum
@@ -422,24 +422,56 @@ reset:
     out SREG, r16
     reti
 
-digit_2:
-    ; Lógica para dígito 2
-    ; ...
+digito2:
+    digito2:
+    ; Desplaza R4 hacia la izquierda y rota su contenido hacia R16
+    LSL R4            
+    LSL R4           
+    LSL R4           
+    LSL R4            
+    ROL R16           
+    LSL R4            
+    ROL R16           
+    LSL R4            
+    ROL R16           
+    LSL R4            
+    ROL R16           
     jmp _tmr0_out
 
-digit_3:
-    ; Lógica para dígito 3
-    ; ...
+digito3:
+    ; Desplaza R5 hacia la izquierda y rota su contenido hacia R16; Desplazar R5 a la izquierda (1 bit)
+    ROL R16          
+    LSL R5            
+    ROL R16           
+    LSL R5            
+    ROL R16           
+    LSL R5            
+    ROL R16           
     jmp _tmr0_out
 
-digit_1:
-    ; Lógica para dígito 1
-    ; ...
+digito1:
+    LSL R4            
+    ROL R16           
+    LSL R4            
+    ROL R16           
+    LSL R4            
+    ROL R16           
+    LSL R4            
+    ROL R16           
     jmp _tmr0_out
 
-digit_4:
-    ; Lógica para dígito 4
-    ; ...
+digito4:
+    LSL R5            
+    LSL R5            
+    LSL R5            
+    LSL R5            
+    ROL R16           
+    LSL R5            
+    ROL R16           
+    LSL R5            
+    ROL R16           
+    LSL R5            
+    ROL R16           
     jmp _tmr0_out
 	
 
