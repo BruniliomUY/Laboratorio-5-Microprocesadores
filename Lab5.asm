@@ -54,6 +54,7 @@ start:
 	sei									;habilito interrupciones para disply y botones
 
 	jmp		modo_transmisor
+
 ;	jmp		modo_receptor
 
 modo_transmisor:
@@ -102,19 +103,21 @@ wait_4RX:							;acá me pongo a esperar que alguien presione cualquier botón
 ;Chksum	- calcula el Checksum del vector buffer_msg (512 valores, r5:r4 = chksum)
 ;---------------------------------------------------------------------------------
 Chksum_512:			
-	;apunto Y al primer byte del mensaje
-
-	;implementar
-	;implementar
-	;implementar
+	ldi     r28, low(buffer_msg)   ; Apunta Y (r29:r28) al inicio de buffer_msg
+    ldi     r29, high(buffer_msg)
+    
+    clr     r5                     ; Inicializamos r5:r4 a 0 (acumulador de checksum)
+    clr     r4
 
 chksum_loop:
-	;traigo 1 byte a sumar
-	;la suma la voy acumulando en r5:r4
+	 ld      r0, Y+                 ; Carga el byte actual de buffer_msg en r0
+    add     r4, r0                 ; Suma r0 a la parte baja del checksum (r4)
+    adc     r5, r1                 ; Suma el acarreo a la parte alta del checksum (r5)
 
-	;implementar
-	;implementar
-	;implementar
+    ; Comprobar si hemos llegado al final de buffer_msg (512 bytes)
+    cpi     r28, low(bmsg_end)     ; Comparar si el puntero Y ha llegado a bmsg_end
+    cpc     r29, high(bmsg_end)
+    brne    chksum_loop            ; Si no ha llegado, continúa en el bucle
 
 	ret
 
@@ -122,19 +125,24 @@ chksum_loop:
 ;TX - rutina de transmisión serial USART. Transmite los 512 bytes de buffer_msg
 ;-----------------------------------------------------------------------------------------
 TX_512:
-;inicialización			
-	;apunto Z al primer byte del vector de 512 bytes 
-	;configuro usart como transmisor (UCSR0B)
+	ldi     r30, low(buffer_msg)     ; Apunta Z (r31:r30) al inicio de buffer_msg
+    ldi     r31, high(buffer_msg)
+    
+    sbi     UCSR0B, TXEN0            ; Habilita el transmisor en USART
 
 TX_loop1:
-	;traigo el Byte a transmitir	
-	;pongo a transmitir (UDR0)
+	ld      r0, Z+                   ; Carga el byte de buffer_msg a r0 y avanza Z
+    out     UDR0, r0                 ; Carga r0 en UDR0 para transmitir
 
 TX_loop2:									
-	;espero a que termine la transmisión del byte por poling (UCSR0A)
-	
+	sbis    UCSR0A, UDRE0            ; Espera hasta que UDRE0 sea 1 (buffer vacío)
+    rjmp    TX_loop2                 ; Si no está listo, sigue esperando
 
-;chequeo si llegué al final del buffer
+	ldi     r24, low(buffer_msg + 512)   ; Carga la dirección final del buffer
+    ldi     r25, high(buffer_msg + 512)
+    cp      r30, r24                     ; Compara Z con el final del buffer
+    cpc     r31, r25
+    brne    TX_loop1                     ; Si Z no llegó al final, repite el bucle
 
 	ret
 
@@ -356,11 +364,84 @@ segmap:
 
 _tmr0_int:							
 	
-	;implemente el codigo aqui
-	;implemente el codigo aqui	
-	;implemente el codigo aqui
+	push r16  
+	in r16, SREG	  
+	push r4
+	push r5
+	push r22
 
-	reti
+	CLC r16
+	CLC
+
+	CPI r25,0x00
+	BREQ RESET
+
+	MOV r23,r25
+
+; Desplazar R23 hacia la izquierda
+    LSL r23          ; Desplazar R23 a la izquierda (R23 = R23 << 1)
+    ROL r16          ; Rotar a la izquierda R16 (incluyendo el carry)
+    CLC               ; Limpiar el carry para la próxima operación
+
+    LSL r23          ; Desplazar R23 nuevamente a la izquierda
+    ROL r16          ; Rotar R16 nuevamente
+    CLC               ; Limpiar el carry nuevamente
+
+    LSL r23          ; Desplazar R23 una vez más a la izquierda
+    ROL r16          ; Rotar R16 nuevamente
+    CLC               ; Limpiar el carry nuevamente
+
+    LSL r23          ; Desplazar R23 una vez más a la izquierda
+    ROL r16          ; Rotar R16 nuevamente
+    CLC               ; Limpiar el carry nuevamente
+
+	CPI r16, 0b00001000
+    BREQ digit_1
+    CPI r16, 0b00000100
+    BREQ digit_2
+    CPI r16, 0b00000001
+    BREQ digit_4
+    CPI r16, 0b00000010
+    BREQ digit_3
+
+_tmr0_out:
+    RCALL sacanum
+    CLC
+    LSL r25
+    pop r22
+    pop r5
+    pop r4
+    out SREG, r16
+    reti
+
+reset:
+    LDI r25, 0x10
+    pop r4
+    pop r5
+    pop r16
+    out SREG, r16
+    reti
+
+digit_2:
+    ; Lógica para dígito 2
+    ; ...
+    jmp _tmr0_out
+
+digit_3:
+    ; Lógica para dígito 3
+    ; ...
+    jmp _tmr0_out
+
+digit_1:
+    ; Lógica para dígito 1
+    ; ...
+    jmp _tmr0_out
+
+digit_4:
+    ; Lógica para dígito 4
+    ; ...
+    jmp _tmr0_out
+	
 
 
 
@@ -375,8 +456,25 @@ _tmr0_int:
 ;
 _pcint1:
 	
-	;implemente el codigo aqui
-	;implemente el codigo aqui	
-	;implemente el codigo aqui
+	 ; Guarda los registros que vas a usar
+    push r16
+    in r16, SREG
+    push r16
+
+    ; Verifica el estado del pin específico del botón
+    ; (Suponiendo que el botón está en PCINT8, correspondiente a PC0)
+    in r16, PINC            ; Lee el estado del puerto C
+    sbrs r16, PC0           ; Salta si el bit PC0 es cero (botón presionado)
+    rjmp pcint1_done        ; Si no está presionado, salta al final
+
+    ; Marca en r26 que el botón ha sido presionado
+    sbi r26, 0              ; Activa el bit 0 de r26 (marca de botón presionado)
+
+pcint1_done:
+    ; Restaura los registros
+    pop r16
+    out SREG, r16
+    pop r16
+    reti                     ; Retorna de la interrupción
 	
 	reti
