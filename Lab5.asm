@@ -125,23 +125,26 @@ suma:
 	;implementar
 	;implementar
 	;implementar
-;-----------------------------------------------------------------------------------------
-;TX - rutina de transmisión serial USART. Transmite los 512 bytes de buffer_msg
-;-----------------------------------------------------------------------------------------
 TX_512:
-;inicialización	
-; Configuración del USART para transmisión
+    ldi     r30, low(buffer_msg)    ; Apunta Z (r31:r30) al inicio de buffer_msg
+    ldi     r31, high(buffer_msg)
 
-TX_loop1:
-	;traigo el Byte a transmitir
+TX_TransmitByte:
+    ld      r0, Z+                  ; Carga el byte de buffer_msg a r0 y avanza Z
+    sts     UDR0, r0                ; Transmite el byte cargándolo en UDR0
 
-TX_loop2:									
-	;espero a que termine la transmisión del byte por poling (UCSR0A)
-	
+Wait_TX_Complete:
+    lds     r16, UCSR0A             ; Lee el estado de UCSR0A
+    sbrs    r16, TXC0               ; Verifica si TXC0 (Transmisión completada) está en 1
+    rjmp    Wait_TX_Complete        ; Espera si no ha terminado
 
-    ;chequeo si llegué al final del buffer
+    ldi     r24, low(bmsg_end)      ; Verifica si hemos llegado al final del buffer
+    ldi     r25, high(bmsg_end)
+    cp      r30, r24
+    cpc     r31, r25
+    brne    TX_TransmitByte         ; Repite hasta que se transmitan todos los bytes
 
-	ret
+    ret
 
 
 ;------------------------------------------------------------------------------
@@ -149,26 +152,24 @@ TX_loop2:
 ;IMPORTANTE: acá está SIN INTERRUPCIONES lo cual es ineficiente 
 ;------------------------------------------------------------------------------
 RX_512:
-;inicialización			
-	;apunto Z al primer byte del vector de 512 bytes
-	;configuro el USART como receptor (UCSR0B)
+    ldi     r30, low(buffer_msg)    ; Apunta Z (r31:r30) al inicio de buffer_msg
+    ldi     r31, high(buffer_msg)
 
-RX_Wait:
-	;ahora poling para esperar recibir algo	(UDR0)
-	
-	;llego aquí solo si recibí algo
-	; guardo lo que recibí		
-	
+RX_WaitForByte:
+    lds     r16, UCSR0A             ; Lee el estado de UCSR0A
+    sbrs    r16, RXC0               ; Verifica si RXC0 (Datos recibidos) está en 1
+    rjmp    RX_WaitForByte          ; Espera si no hay datos
 
-	;chequeo si llegué al final del buffer
-	
-	ret
-						
+    lds     r17, UDR0               ; Carga el byte recibido en r17
+    st      Z+, r17                 ; Almacena el byte en buffer_msg y avanza Z
 
+    ldi     r24, low(bmsg_end)      ; Verifica si hemos llegado al final del buffer
+    ldi     r25, high(bmsg_end)
+    cp      r30, r24
+    cpc     r31, r25
+    brne    RX_WaitForByte          ; Repite hasta que se reciban todos los bytes
 
-
-
-
+    ret
 //--------------------------------------------
 system_init:
 ;configuro los puertos:
