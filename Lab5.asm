@@ -103,21 +103,21 @@ wait_4RX:							;acá me pongo a esperar que alguien presione cualquier botón
 ;Chksum	- calcula el Checksum del vector buffer_msg (512 valores, r5:r4 = chksum)
 ;---------------------------------------------------------------------------------
 Chksum_512:			
-	ldi     r28, low(buffer_msg)   ; Apunta Y (r29:r28) al inicio de buffer_msg
-    ldi     r29, high(buffer_msg)
+	ldi     YL, low(buffer_msg)   ; Apunta Y (r29:r28) al inicio de buffer_msg
+    ldi     YH, high(buffer_msg)
     
     clr     r5                     ; Inicializamos r5:r4 a 0 (acumulador de checksum)
     clr     r4
+	ldi r22, 0x00					;Contador de 512 bytes
 
 chksum_loop:
 	 ld      r0, Y+                 ; Carga el byte actual de buffer_msg en r0
     add     r4, r0                 ; Suma r0 a la parte baja del checksum (r4)
-    adc     r5, r1                 ; Suma el acarreo a la parte alta del checksum (r5)
+    adc     r5, r1                ; Suma el acarreo a la parte alta del checksum (r5)
+	inc r22
 
-    ; Comprobar si hemos llegado al final de buffer_msg (512 bytes)
-    cpi     r28, low(bmsg_end)     ; Comparar si el puntero Y ha llegado a bmsg_end
-    cpc     r29, high(bmsg_end)
-    brne    chksum_loop            ; Si no ha llegado, continúa en el bucle
+    cpi r22,0x02
+    brne    chksum_loop            
 
 	ret
 
@@ -125,17 +125,23 @@ chksum_loop:
 ;TX - rutina de transmisión serial USART. Transmite los 512 bytes de buffer_msg
 ;-----------------------------------------------------------------------------------------
 TX_512:
-	ldi     r30, low(buffer_msg)     ; Apunta Z (r31:r30) al inicio de buffer_msg
-    ldi     r31, high(buffer_msg)
+	ldi     ZL, low(buffer_msg)     ; Apunta Z (r31:r30) al inicio de buffer_msg
+    ldi     ZH, high(buffer_msg)
     
-    sbi     UCSR0B, TXEN0            ; Habilita el transmisor en USART
+    push r16
+	ldi r16,(1<<TXEN0)
+	sts UCSR0B,r16
+	pop r16
 
 TX_loop1:
 	ld      r0, Z+                   ; Carga el byte de buffer_msg a r0 y avanza Z
-    out     UDR0, r0                 ; Carga r0 en UDR0 para transmitir
+    sts     UDR0, r0               ; Carga r0 en UDR0 para transmitir
 
-TX_loop2:									
-	sbis    UCSR0A, UDRE0            ; Espera hasta que UDRE0 sea 1 (buffer vacío)
+TX_loop2:			
+	push r16
+	lds r16,UCSR0A		
+	sbrs r16,UDRE0			
+	pop r16
     rjmp    TX_loop2                 ; Si no está listo, sigue esperando
 
 	ldi     r24, low(buffer_msg + 512)   ; Carga la dirección final del buffer
@@ -153,18 +159,28 @@ TX_loop2:
 ;IMPORTANTE: acá está SIN INTERRUPCIONES lo cual es ineficiente 
 ;------------------------------------------------------------------------------
 RX_512:
-;inicialización			
-	;apunto Z al primer byte del vector de 512 bytes
-	;configuro el USART como receptor (UCSR0B)
 
+ldi     ZL, low(buffer_msg)     ; Apunto Z (r31:r30) al inicio de buffer_msg
+ldi     ZH, high(buffer_msg)
+
+push r22
+ldi r22,0x90
+sts UCSR0B, r22
+pop r22
+sei
 RX_Wait:
-	;ahora poling para esperar recibir algo	(UDR0)
-	
-	;llego aquí solo si recibí algo
-	; guardo lo que recibí		
-	
+	lds r22,UCSR0A
+	sbrs    r22, RXC0              ; Esperar hasta que RXC0 esté en 1
+    rjmp    RX_Wait                   ; Si no está listo, repetir
 
-	;chequeo si llegué al final del buffer
+    ; Leer el byte recibido y guardarlo en buffer_msg
+    ld      r23, UDR0                  ; Leer el byte recibido
+    st      Z+, r23                   ; Almacenar en buffer_msg y avanzar el puntero Z
+
+    ; Comprobar si hemos recibido los 512 bytes
+    cpi     r24, low(bmsg_end)        ; Comparar si hemos llegado al final del buffer
+    cpc     r25, high(bmsg_end)
+    brne    RX_Wait                   ; Si no ha llegado, continuar en el bucle
 	
 	ret
 						
@@ -238,6 +254,7 @@ system_init:
 aleatorios:			
 	ldi		r28,	low(buffer_msg)		;apunto Y al primer byte del mensaje
 	ldi		r29,	high(buffer_msg)
+
 ale_loop:
 ; genero un número de 32bits nuevo usando XORSHIFT de 32 bits (https://en.wikipedia.org/wiki/Xorshift)	
 	ldi		r20,	13
@@ -423,7 +440,6 @@ reset:
     reti
 
 digito2:
-    digito2:
     ; Desplaza R4 hacia la izquierda y rota su contenido hacia R16
     LSL R4            
     LSL R4           
@@ -500,7 +516,7 @@ _pcint1:
     rjmp pcint1_done        ; Si no está presionado, salta al final
 
     ; Marca en r26 que el botón ha sido presionado
-    sbi r26, 0              ; Activa el bit 0 de r26 (marca de botón presionado)
+    sbr     r26, (1 << 0)              ; Activa el bit 0 de r26 (marca de botón presionado)
 
 pcint1_done:
     ; Restaura los registros
