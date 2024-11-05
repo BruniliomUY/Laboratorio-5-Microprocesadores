@@ -36,8 +36,6 @@
 	jmp		_pcint1		;salto a la rutina de atención a pcint1, interrupción por cambio para los botones
 .ORG 0x001C 
 	jmp		_tmr0_int	;salto atención a rutina de comparación A del timer 0
-.ORG 0x24
-	rjmp RX
 ; ---------------------------------------------------------------------------------------
 
 ;memoria RAM
@@ -55,8 +53,8 @@ start:
 	mov		r4,		r26
 	sei									;habilito interrupciones para disply y botones
 
-	jmp		modo_transmisor
-;	jmp		modo_receptor
+;	jmp		modo_transmisor
+	jmp		modo_receptor
 
 modo_transmisor:
 
@@ -131,18 +129,30 @@ suma:
 ;TX - rutina de transmisión serial USART. Transmite los 512 bytes de buffer_msg
 ;-----------------------------------------------------------------------------------------
 TX_512:
-;inicialización	
+	ldi     r30, low(buffer_msg)     ; Apunta Z (r31:r30) al inicio de buffer_msg
+    ldi     r31, high(buffer_msg)
 
-; Configuración del USART para transmisión
+    PUSH r16
+    ldi r16, (1 << TXEN0)       ; Cargar el bit TXEN0 en r16
+	sts UCSR0B, r16             ; Almacenar el valor en UCSR0B para habilitar el transmisor                ; Habilita el transmisor en USART
+	POP  r16
 
 TX_loop1:
-	;traigo el Byte a transmitir
+	ld      r0,    Z+                  ; Carga el byte de buffer_msg a r0 y avanza Z
+    STS     UDR0, r0                  ; Carga r0 en UDR0 para transmitir
 
-TX_loop2:									
-	;espero a que termine la transmisión del byte por poling (UCSR0A)
-	
+TX_loop2:	
+	PUSH    R16	
+	lds     r16, UCSR0A              ; Cargar el valor de UCSR0A en r16
+    sbrs    r16, UDRE0              ; Saltar si UDRE0 está en 1 (buffer vacío)
+	POP     R16	
+    rjmp    TX_loop2                 ; Si no está listo, sigue esperando
 
-    ;chequeo si llegué al final del buffer
+	ldi     r24, low(bmsg_end)           ; Carga la dirección final del buffer
+    ldi     r27, high(bmsg_end)
+    cp      r30, r24                     ; Compara Z con el final del buffer
+    cpc     r31, r27
+    brne    TX_loop1                     ; Si Z no llegó al final, repite el bucle
 
 	ret
 
@@ -152,32 +162,37 @@ TX_loop2:
 ;IMPORTANTE: acá está SIN INTERRUPCIONES lo cual es ineficiente 
 ;------------------------------------------------------------------------------
 RX_512:
-	;inicialización		
-	
-	;apunto Z al primer byte del vector de 512 bytes
-	ldi		r31,	low(buffer_msg)		;apunto Z al primer byte del mensaje
-	ldi		r30,	high(buffer_msg)
+    ; Inicialización        
 
-	;configuro el USART como receptor (UCSR0B)
-	PUSH	R22
-	LDI		R22,	0x90
-	STS		UCSR0B,	R22
-	POP     R22
-	SEI
+    ; Apunto Z al primer byte del vector de 512 bytes
+    ldi     r30, low(buffer_msg)       ; Byte bajo de la dirección en r30
+    ldi     r31, high(buffer_msg)      ; Byte alto de la dirección en r31
+
+    ; Configuro el USART como receptor (UCSR0B)
+    PUSH    R22
+    ldi     R22, 0x90                  ; Habilita el receptor en USART
+    sts     UCSR0B, R22
+    POP     R22
+
 RX_Wait:
-	;ahora poling para esperar recibir algo	(UDR0)
-	RJMP	RX_Wait
-RX: LDS		R23,	UDR0
-	;llego aquí solo si recibí algo
-
-	; guardo lo que recibí	
+    ; Espera activa para recibir algo (verifica el bit RXC0 en UCSR0A)
+	PUSH    R22
+    lds     r22, UCSR0A                ; Lee el valor de UCSR0A
+    sbrs    r22, RXC0                  ; Si RXC0 está en 0, sigue esperando
+    rjmp    RX_Wait                    ; Repite el bucle si no hay datos
+	POP     R22
+RX:
+    ; Una vez que hay datos, carga el dato recibido de UDR0 y lo almacena en el buffer
+    lds     r23, UDR0                  ; Carga el dato recibido en R23
+    st      Z+, r23                    ; Almacena el dato en la posición actual de Z y luego incrementa Z
+    ; Compara Z con bmsg_end para ver si llegamos al final del buffer
+    ldi     r24, low(bmsg_end)         ; Carga la dirección final del buffer en r24:r25
+    ldi     r27, high(bmsg_end)
+    cp      r30, r24                   ; Compara Z con bmsg_end
+    cpc     r31, r27
+    brne    RX_Wait                    ; Si Z no llegó al final, espera el próximo dato
 	
-	;chequeo si llegué al final del buffer
-	ret
-						
-
-
-
+    ret
 
 
 //--------------------------------------------
