@@ -387,7 +387,7 @@ _tmr0_int:
 	push r5
 	push r22
 
-	CLC r16
+	CLR r16
 	CLC
 
 	CPI r25,0x00
