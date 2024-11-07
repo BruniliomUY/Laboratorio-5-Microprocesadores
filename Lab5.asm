@@ -53,8 +53,8 @@ start:
 	mov		r4,		r26
 	sei									;habilito interrupciones para disply y botones
 
-	jmp		modo_transmisor
-;	jmp		modo_receptor
+	;jmp		modo_transmisor
+	jmp		modo_receptor
 
 modo_transmisor:
 
@@ -129,18 +129,25 @@ suma:
 ;TX - rutina de transmisión serial USART. Transmite los 512 bytes de buffer_msg
 ;-----------------------------------------------------------------------------------------
 TX_512:
-;inicialización	
-; Configuración del USART para transmisión
+	ldi     r30, low(buffer_msg)       ; Apunta Z (r31:r30) al inicio de buffer_msg
+	ldi     r31, high(buffer_msg)
+
+	ldi     r16, (1 << TXEN0)          ; Cargar el bit TXEN0 en r16 para habilitar el transmisor
+	sts     UCSR0B, r16
 
 TX_loop1:
-	;traigo el Byte a transmitir
-
-TX_loop2:									
-	;espero a que termine la transmisión del byte por poling (UCSR0A)
-	
-
-    ;chequeo si llegué al final del buffer
-
+	ld      r0, Z+                     ; Carga el byte de buffer_msg en r0 y avanza Z
+	sts     UDR0, r0                   ; Carga r0 en UDR0 para transmitir
+TX_loop2:
+	lds     r16, UCSR0A                ; Cargar el valor de UCSR0A en r16
+	sbrs    r16, UDRE0                 ; Saltar si UDRE0 está en 1 (buffer vacío)
+	rjmp    TX_loop2                   ; Si no está listo, sigue esperando
+                                       ; Compara Z con bmsg_end para ver si llegamos al final del buffer
+	ldi     r24, low(bmsg_end)         ; Carga la dirección final del buffer
+	ldi     r27, high(bmsg_end)
+	cp      r30, r24                   ; Compara Z con el final del buffer
+	cpc     r31, r27
+	brne    TX_loop1                   ; Si Z no llegó al final, repite el bucle
 	ret
 
 
@@ -149,24 +156,32 @@ TX_loop2:
 ;IMPORTANTE: acá está SIN INTERRUPCIONES lo cual es ineficiente 
 ;------------------------------------------------------------------------------
 RX_512:
-;inicialización			
-	;apunto Z al primer byte del vector de 512 bytes
-	;configuro el USART como receptor (UCSR0B)
+    ; Inicialización 
+	       
+    ; Apunto Z al primer byte del vector de 512 bytes
+    ldi     r30, low(buffer_msg)       ; Byte bajo de la dirección en r30
+    ldi     r31, high(buffer_msg)      ; Byte alto de la dirección en r31
+
+    ; Configuro el USART como receptor (UCSR0B)
+    ldi     R22, 0xD8                  ; Habilita el receptor en USART
+    sts     UCSR0B, R22
 
 RX_Wait:
-	;ahora poling para esperar recibir algo	(UDR0)
-	
-	;llego aquí solo si recibí algo
-	; guardo lo que recibí		
-	
-
-	;chequeo si llegué al final del buffer
-	
-	ret
-						
-
-
-
+    ; Espera activa para recibir algo (verifica el bit RXC0 en UCSR0A)
+    lds     r22, UCSR0A                ; Lee el valor de UCSR0A
+    sbrs    r22, RXC0                  ; Si RXC0 está en 0, sigue esperando
+    rjmp    RX_Wait                    ; Repite el bucle si no hay datos
+RX:
+    ; Una vez que hay datos, carga el dato recibido de UDR0 y lo almacena en el buffer
+    lds     r23, UDR0                  ; Carga el dato recibido en R23
+    st      Z+, r23                    ; Almacena el dato en la posición actual de Z y luego incrementa Z
+    ; Compara Z con bmsg_end para ver si llegamos al final del buffer
+    ldi     r24, low(bmsg_end)         ; Carga la dirección final del buffer en r24:r25
+    ldi     r27, high(bmsg_end)
+    cp      r30, r24                   ; Compara Z con bmsg_end
+    cpc     r31, r27
+    brne    RX_Wait                    ; Si Z no llegó al final, espera el próximo dato
+    ret
 
 
 //--------------------------------------------
@@ -358,121 +373,53 @@ segmap:
 ; Registros utilizados:
 ;				r25 - indica el próximo digito a sacar, r25 = 00010000 ; 00100000 ; 01000000 ; 10000000 cambia cada entrada a la rutina.
 
-_tmr0_int:	
-	in		r22,   SREG
-	PUSH	R16
-	PUSH	R5
-	PUSH	R4
-	CLR     R16
-	CLC
+_tmr0_int:
+	in r27, SREG
+	push r27
+	push r21
+	push r16
+	push r22
+	push r23
+	push r24
 
-	CPI		R25,  0x00
-	BREQ	reset
+	mov r21, r5
+	swap r21
+	andi r21, 0x0F
+	ori r21, 0x80
+	mov r16, r21
+	call sacanum
 
-	MOV		R23,   R25
-	LSL		R23
-	ROL		R16
-	CLC
-	LSL		R23
-	ROL		R16
-	CLC
-	LSL		R23
-	ROL		R16
-	CLC
-	LSL		R23
-	ROL		R16
-	CLC
+	rcall looper
+	mov r22, r5
+	andi r22, 0x0F
+	ori r22, 0x40
+	mov r16, r22
+	call sacanum
 
-	CPI		R16, 0b00001000
-	BREQ    digit_1
+	rcall looper
 
-	CPI		R16, 0b00000100
-	BREQ    digit_2
+	mov r23, r4
+	swap r23
+	andi r23, 0x0F
+	ori r23, 0x20
+	mov r16, r23
+	call sacanum
 
-	CPI		R16, 0b00000001
-	BREQ    digit_4
-
-	CPI		R16, 0b00000010
-	BREQ    digit_3
-
-_tmr0_out:
-	RCALL	sacanum
-	CLC
-	LSL		R25
-	POP		R4
-	POP		R5
-	POP		R16
-	out		SREG,   r22
+	rcall looper
+	mov r24, r4
+	andi r24, 0x0F
+	ori r24, 0x10
+	mov r16, r24
+	call sacanum
+	
+	pop r24
+	pop r23
+	pop r22
+	pop r16
+	pop r24
+	pop r27
+	out SREG, r27
 	reti
-	;implemente el codigo aqui
-	;implemente el codigo aqui	
-	;implemente el codigo aqui
-reset:
-	LDI		R25,  0x10
-	POP		R4
-	POP		R5
-	POP		R16
-	out		SREG,   r22
-	reti
-
-digit_2:
-    ; Desplazar R4 cuatro veces a la izquierda
-    LSL     R4
-    LSL     R4
-    LSL     R4
-    LSL     R4
-    ; Rotar hacia r16
-    LSL     R4
-    ROL     r16
-    LSL     R4
-    ROL     r16
-    LSL     R4
-    ROL     r16
-    LSL     R4
-    ROL     r16
-    jmp     _tmr0_out
-
-digit_3:
-    ; Desplazar y rotar desde R5 hacia r16
-    LSL     R5
-    ROL     r16
-    LSL     R5
-    ROL     r16
-    LSL     R5
-    ROL     r16
-    LSL     R5
-    ROL     r16
-    jmp     _tmr0_out
-
-digit_1:
-    ; Desplazar y rotar desde R4 hacia r16
-    LSL     R4
-    ROL     r16
-    LSL     R4
-    ROL     r16
-    LSL     R4
-    ROL     r16
-    LSL     R4
-    ROL     r16
-    jmp     _tmr0_out
-
-digit_4:
-    ; Desplazar R5 cuatro veces a la izquierda
-    LSL     R5
-    LSL     R5
-    LSL     R5
-    LSL     R5
-    ; Rotar hacia r16
-    LSL     R5
-    ROL     r16
-    LSL     R5
-    ROL     r16
-    LSL     R5
-    ROL     r16
-    LSL     R5
-    ROL     r16
-    jmp     _tmr0_out
-
 
 
 	
@@ -497,3 +444,11 @@ _pcint1:
 	POP	r16
 	out		SREG,   r22
 	reti
+
+looper:
+	ldi  r18, 21
+    ldi  r19, 199
+	L1: dec  r19
+		brne L1
+		dec  r18
+		brne L1
