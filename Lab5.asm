@@ -101,44 +101,54 @@ wait_4RX:							;acá me pongo a esperar que alguien presione cualquier botón
 ;---------------------------------------------------------------------------------
 ;Chksum	- calcula el Checksum del vector buffer_msg (512 valores, r5:r4 = chksum)
 ;---------------------------------------------------------------------------------
-chksum_512:
-    ldi YH, high(buffer_msg)  ; Apuntar al inicio de buffer_msg
-    ldi YL, low(buffer_msg)
-    clr r5                    ; Limpiar checksum alto
-    clr r4                    ; Limpiar checksum bajo
-    ldi r20, 0x00             ; Contador de 512 bytes
-
+Chksum_512:			
+	;apunto Y al primer byte del mensaje
+	CLC
+	ldi r28, low(buffer_msg)
+	ldi r29, high(buffer_msg)
 chksum_loop:
-    ld r0, Y+                 ; Cargar el siguiente byte desde buffer_msg
-    add r4, r0                ; Sumar al checksum bajo
-    adc r5, r1                ; Sumar con acarreo al checksum alto
-    inc r20
-    cpi r20, 0x02             ; Repetir 512 veces
-    brne chksum_loop
-
-ret
-
-
+	cpi		YL,	   low(bmsg_end)	
+	brne suma
+	cpi		YH,		high(bmsg_end)
+	brne suma
+	//ldi r27, 0b00011111
+	//AND r5, r27
+	RET
+suma:
+	ld      r21, Y+
+	ADC		r4, R21				;Sumamos cada 1 seg
+	BRVC    chksum_loop			;Si NO supera
+	inc		r5
+	CLV
+	rjmp    chksum_loop			;Si NO supera
+	;la suma la voy acumulando en r5:r4
+	;implementar
+	;implementar
+	;implementar
 ;-----------------------------------------------------------------------------------------
 ;TX - rutina de transmisión serial USART. Transmite los 512 bytes de buffer_msg
 ;-----------------------------------------------------------------------------------------
 TX_512:
-;inicialización			
-	;apunto Z al primer byte del vector de 512 bytes 
-	;configuro usart como transmisor (UCSR0B)
+	ldi     r30, low(buffer_msg)       ; Apunta Z (r31:r30) al inicio de buffer_msg
+	ldi     r31, high(buffer_msg)
+
+	ldi     r16, (1 << TXEN0)          ; Cargar el bit TXEN0 en r16 para habilitar el transmisor
+	sts     UCSR0B, r16
 
 TX_loop1:
-	;traigo el Byte a transmitir	
-	;pongo a transmitir (UDR0)
-
-TX_loop2:									
-	;espero a que termine la transmisión del byte por poling (UCSR0A)
-	
-
-;chequeo si llegué al final del buffer
-
+	ld      r0, Z+                     ; Carga el byte de buffer_msg en r0 y avanza Z
+	sts     UDR0, r0                   ; Carga r0 en UDR0 para transmitir
+TX_loop2:
+	lds     r16, UCSR0A                ; Cargar el valor de UCSR0A en r16
+	sbrs    r16, UDRE0                 ; Saltar si UDRE0 está en 1 (buffer vacío)
+	rjmp    TX_loop2                   ; Si no está listo, sigue esperando
+                                       ; Compara Z con bmsg_end para ver si llegamos al final del buffer
+	ldi     r24, low(bmsg_end)         ; Carga la dirección final del buffer
+	ldi     r27, high(bmsg_end)
+	cp      r30, r24                   ; Compara Z con el final del buffer
+	cpc     r31, r27
+	brne    TX_loop1                   ; Si Z no llegó al final, repite el bucle
 	ret
-
 
 
 ;------------------------------------------------------------------------------
@@ -146,24 +156,32 @@ TX_loop2:
 ;IMPORTANTE: acá está SIN INTERRUPCIONES lo cual es ineficiente 
 ;------------------------------------------------------------------------------
 RX_512:
-;inicialización			
-	;apunto Z al primer byte del vector de 512 bytes
-	;configuro el USART como receptor (UCSR0B)
+    ; Inicialización 
+	       
+    ; Apunto Z al primer byte del vector de 512 bytes
+    ldi     r30, low(buffer_msg)       ; Byte bajo de la dirección en r30
+    ldi     r31, high(buffer_msg)      ; Byte alto de la dirección en r31
+
+    ; Configuro el USART como receptor (UCSR0B)
+    ldi     R22, 0xD8                  ; Habilita el receptor en USART
+    sts     UCSR0B, R22
 
 RX_Wait:
-	;ahora poling para esperar recibir algo	(UDR0)
-	
-	;llego aquí solo si recibí algo
-	; guardo lo que recibí		
-	
-
-	;chequeo si llegué al final del buffer
-	
-	ret
-						
-
-
-
+    ; Espera activa para recibir algo (verifica el bit RXC0 en UCSR0A)
+    lds     r22, UCSR0A                ; Lee el valor de UCSR0A
+    sbrs    r22, RXC0                  ; Si RXC0 está en 0, sigue esperando
+    rjmp    RX_Wait                    ; Repite el bucle si no hay datos
+RX:
+    ; Una vez que hay datos, carga el dato recibido de UDR0 y lo almacena en el buffer
+    lds     r23, UDR0                  ; Carga el dato recibido en R23
+    st      Z+, r23                    ; Almacena el dato en la posición actual de Z y luego incrementa Z
+    ; Compara Z con bmsg_end para ver si llegamos al final del buffer
+    ldi     r24, low(bmsg_end)         ; Carga la dirección final del buffer en r24:r25
+    ldi     r27, high(bmsg_end)
+    cp      r30, r24                   ; Compara Z con bmsg_end
+    cpc     r31, r27
+    brne    RX_Wait                    ; Si Z no llegó al final, espera el próximo dato
+    ret
 
 
 //--------------------------------------------
@@ -356,7 +374,13 @@ segmap:
 ;				r25 - indica el próximo digito a sacar, r25 = 00010000 ; 00100000 ; 01000000 ; 10000000 cambia cada entrada a la rutina.
 
 _tmr0_int:
+	in r27, SREG
+	push r27
 	push r21
+	push r16
+	push r22
+	push r23
+	push r24
 
 	mov r21, r5
 	swap r21
@@ -388,12 +412,17 @@ _tmr0_int:
 	mov r16, r24
 	call sacanum
 	
-	pop r21
+	pop r24
+	pop r23
+	pop r22
+	pop r16
+	pop r24
+	pop r27
+	out SREG, r27
 	reti
 
 
-
-
+	
 
 ; ---------------------------------------------------------------------------
 ; Rutina de atención a la interrupción por cambio en el estado de los botones
@@ -401,13 +430,19 @@ _tmr0_int:
 ; recordar que se configuró la detección por cambio para que ante un cambio en el valor lógico de cualquiera de los 3 botones
 ; se dispara la interrupción. LA interrupción no distingué qué botón se apretó de modo que lo verifico dentro de la interrupción.
 ; Los botones se encuentran en PC.1, PC.2, PC.3 y recordar del esquemático del shield, que son activos por nivel bajo.
+;Rutina de atención a la interrupción de los botones. Cuando entra si algún botón está apretado pone el bit0 de r26 en '1'.	
 ;
 _pcint1:
-	
+	in		r22,   SREG
+	PUSH r16
+	in		r16, PINC             ; Cargar el valor del puerto C en r16
+	sbrc	r16, 1                ; Saltar si el bit 1 de PC1 está en 0
+	sbr     r26, (1 << 0)
 	;implemente el codigo aqui
 	;implemente el codigo aqui	
 	;implemente el codigo aqui
-	
+	POP	r16
+	out		SREG,   r22
 	reti
 
 looper:
