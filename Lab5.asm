@@ -129,31 +129,25 @@ suma:
 ;TX - rutina de transmisión serial USART. Transmite los 512 bytes de buffer_msg
 ;-----------------------------------------------------------------------------------------
 TX_512:
-	ldi     r30, low(buffer_msg)     ; Apunta Z (r31:r30) al inicio de buffer_msg
-    ldi     r31, high(buffer_msg)
+	ldi     r30, low(buffer_msg)       ; Apunta Z (r31:r30) al inicio de buffer_msg
+	ldi     r31, high(buffer_msg)
 
-    PUSH r16
-    ldi r16, (1 << TXEN0)       ; Cargar el bit TXEN0 en r16
-	sts UCSR0B, r16             ; Almacenar el valor en UCSR0B para habilitar el transmisor                ; Habilita el transmisor en USART
-	POP  r16
+	ldi     r16, (1 << TXEN0)          ; Cargar el bit TXEN0 en r16 para habilitar el transmisor
+	sts     UCSR0B, r16
 
 TX_loop1:
-	ld      r0,    Z+                  ; Carga el byte de buffer_msg a r0 y avanza Z
-    STS     UDR0, r0                  ; Carga r0 en UDR0 para transmitir
-
-TX_loop2:	
-	PUSH    R16	
-	lds    r16, UCSR0A              ; Cargar el valor de UCSR0A en r16
-    sbrs    r16, UDRE0              ; Saltar si UDRE0 está en 1 (buffer vacío)
-	POP     R16	
-    rjmp    TX_loop2                 ; Si no está listo, sigue esperando
-
-	ldi     r24, low(bmsg_end)           ; Carga la dirección final del buffer
-    ldi     r25, high(bmsg_end)
-    cp      r30, r24                     ; Compara Z con el final del buffer
-    cpc     r31, r25
-    brne    TX_loop1                     ; Si Z no llegó al final, repite el bucle
-
+	ld      r0, Z+                     ; Carga el byte de buffer_msg en r0 y avanza Z
+	sts     UDR0, r0                   ; Carga r0 en UDR0 para transmitir
+TX_loop2:
+	lds     r16, UCSR0A                ; Cargar el valor de UCSR0A en r16
+	sbrs    r16, UDRE0                 ; Saltar si UDRE0 está en 1 (buffer vacío)
+	rjmp    TX_loop2                   ; Si no está listo, sigue esperando
+                                       ; Compara Z con bmsg_end para ver si llegamos al final del buffer
+	ldi     r24, low(bmsg_end)         ; Carga la dirección final del buffer
+	ldi     r27, high(bmsg_end)
+	cp      r30, r24                   ; Compara Z con el final del buffer
+	cpc     r31, r27
+	brne    TX_loop1                   ; Si Z no llegó al final, repite el bucle
 	ret
 
 
@@ -162,37 +156,31 @@ TX_loop2:
 ;IMPORTANTE: acá está SIN INTERRUPCIONES lo cual es ineficiente 
 ;------------------------------------------------------------------------------
 RX_512:
-    ; Inicialización        
-
+    ; Inicialización 
+	       
     ; Apunto Z al primer byte del vector de 512 bytes
     ldi     r30, low(buffer_msg)       ; Byte bajo de la dirección en r30
     ldi     r31, high(buffer_msg)      ; Byte alto de la dirección en r31
 
     ; Configuro el USART como receptor (UCSR0B)
-    PUSH    R22
-    ldi     R22, 0x90                  ; Habilita el receptor en USART
+    ldi     R22, 0xD8                  ; Habilita el receptor en USART
     sts     UCSR0B, R22
-    POP     R22
-    SEI                                ; Habilita interrupciones globales (opcional si ya está habilitado)
 
 RX_Wait:
     ; Espera activa para recibir algo (verifica el bit RXC0 en UCSR0A)
     lds     r22, UCSR0A                ; Lee el valor de UCSR0A
     sbrs    r22, RXC0                  ; Si RXC0 está en 0, sigue esperando
     rjmp    RX_Wait                    ; Repite el bucle si no hay datos
-
 RX:
     ; Una vez que hay datos, carga el dato recibido de UDR0 y lo almacena en el buffer
     lds     r23, UDR0                  ; Carga el dato recibido en R23
     st      Z+, r23                    ; Almacena el dato en la posición actual de Z y luego incrementa Z
-
     ; Compara Z con bmsg_end para ver si llegamos al final del buffer
     ldi     r24, low(bmsg_end)         ; Carga la dirección final del buffer en r24:r25
-    ldi     r25, high(bmsg_end)
+    ldi     r27, high(bmsg_end)
     cp      r30, r24                   ; Compara Z con bmsg_end
-    cpc     r31, r25
+    cpc     r31, r27
     brne    RX_Wait                    ; Si Z no llegó al final, espera el próximo dato
-	
     ret
 
 
